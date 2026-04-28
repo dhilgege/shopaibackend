@@ -3,6 +3,10 @@
 namespace App\Ai\Agents;
 
 use App\Ai\Middleware\LogPrompts;
+use App\Ai\Tools\ProductLookup;
+use App\Ai\Tools\ProductSearch;
+use App\Ai\Tools\InventoryCheck;
+use App\Ai\Tools\RecommendProducts;
 use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Attributes\Temperature;
@@ -10,12 +14,14 @@ use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Concerns\Promptable;
 
 #[Temperature(0.7)]
-#[Provider('ollama')]
-#[Model('qwen2.5:0.5b')]
-class ChatAgent implements Agent, Conversational, HasMiddleware
+#[Provider('openai')]
+#[Model('gpt-4o-mini')]
+class ChatAgent implements Agent, Conversational, HasMiddleware, HasTools
+class ChatAgent implements Agent, Conversational, HasMiddleware, HasTools
 {
     use Promptable, RemembersConversations;
 
@@ -58,6 +64,16 @@ MARKDOWN;
     {
         return [
             new LogPrompts,
+        ];
+    }
+
+    public function tools(): array
+    {
+        return [
+            new ProductSearch(),
+            new ProductLookup(),
+            new InventoryCheck(),
+            new RecommendProducts(),
         ];
     }
 }

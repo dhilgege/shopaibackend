@@ -7,6 +7,7 @@ use App\Ai\Agents\ChatAgent;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Ai;
 use Throwable;
 
@@ -20,42 +21,37 @@ class ChatController extends Controller
             'user_id' => 'nullable|exists:users,id',
         ]);
 
-        $userId = $validated['user_id'] ?? null;
-        $user = $userId ? User::find($userId) : null;
-
-        // Build agent with user context for conversation memory
-        $agent = new ChatAgent();
-        if ($user) {
-            $agent = $agent->forUser($user);
-        }
-
-        // Continue existing conversation if ID provided
-        if ($conversationId = $validated['conversation_id']) {
-            $agent = $agent->continue($conversationId, as: $user);
-        }
-
         try {
-            $ai = app(Ai::class);
-            $response = $ai->chat($agent, $validated['message']);
+            $response = Http::post(
+                "https://generativelanguage.googleapis.com/v1beta/models/" .
+                env('AI_DEFAULT_MODEL', 'gemini-2.5-flash') .
+                ":generateContent?key=" . env('GEMINI_API_KEY'),
+                [
+                    "contents" => [
+                        [
+                            "parts" => [
+                                ["text" => $validated['message']]
+                            ]
+                        ]
+                    ]
+                ]
+            );
+
+            $text = $response->json()['candidates'][0]['content']['parts'][0]['text'] ?? 'No response';
 
             return response()->json([
                 'data' => [
-                    'message' => (string) $response,
-                    'conversation_id' => $response->conversationId,
+                    'message' => $text,
+                    'conversation_id' => null,
                 ],
             ]);
+
         } catch (Throwable $e) {
-            \Log::error('AI chat error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
             return response()->json([
                 'data' => [
-                    'error' => 'AI service unavailable. Please try again later.',
-                    'message' => 'Sorry, I am having trouble responding right now. Please try again in a moment.',
+                    'message' => 'AI error',
                 ],
-            ], 503);
+            ], 500);
         }
     }
 
@@ -71,23 +67,19 @@ class ChatController extends Controller
         $user = $userId ? User::find($userId) : null;
 
         $agent = new ChatAgent();
+
         if ($user) {
             $agent = $agent->forUser($user);
         }
 
-        if ($conversationId = $validated['conversation_id']) {
-            $agent = $agent->continue($conversationId, as: $user);
+        if (!empty($validated['conversation_id'])) {
+            $agent = $agent->continue($validated['conversation_id'], as: $user);
         }
 
         try {
             $ai = app(Ai::class);
-            $stream = $ai->chatStream($agent, $validated['message']);
-
-            // Return streaming response (SSE)
-            return $stream;
+            return $ai->chatStream($agent, $validated['message']);
         } catch (Throwable $e) {
-            \Log::error('AI chat stream error', ['error' => $e->getMessage()]);
-
             return response()->json([
                 'data' => [
                     'error' => 'AI service unavailable.',
@@ -100,17 +92,18 @@ class ChatController extends Controller
     {
         $userId = $request->input('user_id');
 
-        $query = \App\Models\AgentConversation::query()->with(['messages' => function ($q) {
-            $q->latest()->limit(10);
-        }]);
+        $query = \App\Models\AgentConversation::query()
+            ->with(['messages' => function ($q) {
+                $q->latest()->limit(10);
+            }]);
 
         if ($userId) {
             $query->where('user_id', $userId);
         }
 
-        $conversations = $query->orderBy('updated_at', 'desc')->paginate(20);
-
-        return response()->json(['data' => $conversations]);
+        return response()->json([
+            'data' => $query->orderBy('updated_at', 'desc')->paginate(20)
+        ]);
     }
 
     public function show(string $conversation): JsonResponse
