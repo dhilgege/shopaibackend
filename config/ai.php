@@ -7,7 +7,7 @@ return [
         'ollama' => [
             'driver' => 'ollama',
             'key' => env('OLLAMA_API_KEY', ''),
-            'url' => env('OLLAMA_URL', 'http://100.82.100.80:11434'),
+            'url' => env('OLLAMA_URL', 'http://127.0.0.1:11434'),
             'timeout' => env('AI_TIMEOUT', 120),
         ],
 
