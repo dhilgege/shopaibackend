@@ -21,7 +21,6 @@ use Laravel\Ai\Concerns\Promptable;
 #[Provider('openai')]
 #[Model('gpt-4o-mini')]
 class ChatAgent implements Agent, Conversational, HasMiddleware, HasTools
-class ChatAgent implements Agent, Conversational, HasMiddleware, HasTools
 {
     use Promptable, RemembersConversations;
 
